@@ -19,7 +19,7 @@ fi
 echo "[INFO] Backup created at $FULL_BACKUP_PATH"
 
 # Upload to DigitalOcean Spaces using s3cmd
-if ! s3cmd put "$FULL_BACKUP_PATH" "s3://${DO_SPACE_PATH}${BACKUP_FILE}"; then
+if ! s3cmd put "$FULL_BACKUP_PATH" "s3://${DO_SPACE_BUCKET}/${DO_SPACE_PATH}${BACKUP_FILE}"; then
     echo "[ERROR] Upload to DigitalOcean Spaces failed"
     exit 1
 fi
