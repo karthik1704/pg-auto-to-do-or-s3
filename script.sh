@@ -19,7 +19,7 @@ fi
 echo "[INFO] Backup created at $FULL_BACKUP_PATH"
 
 # Upload to DigitalOcean Spaces using s3cmd
-if ! s3cmd put "$FULL_BACKUP_PATH" "s3://${DO_SPACE_BUCKET}/${DO_SPACE_PATH}${BACKUP_FILE}"; then
+if ! s3cmd put "$FULL_BACKUP_PATH" "s3://${DO_SPACE_PATH}${BACKUP_FILE}"; then
     echo "[ERROR] Upload to DigitalOcean Spaces failed"
     exit 1
 fi
@@ -33,8 +33,11 @@ ls -tp *.gz | grep -v '/$' | tail -n +4 | xargs -r rm --
 # Delete older backups from DO Spaces (keep only 3)
 s3cmd ls "s3://${DO_SPACE_BUCKET}/${DO_SPACE_PATH}" | \
     sort -r | awk '{print $4}' | tail -n +4 | while read -r OLD_BACKUP; do
-        if [ -n "$OLD_BACKUP" ]; then
+        # Check if line is non-empty and looks like a valid S3 URL
+        if [[ -n "$OLD_BACKUP" && "$OLD_BACKUP" == s3://* ]]; then
             echo "[INFO] Deleting old backup from DO Spaces: $OLD_BACKUP"
             s3cmd del "$OLD_BACKUP"
+        else
+            echo "[WARN] Skipping invalid or empty key: '$OLD_BACKUP'"
         fi
     done
