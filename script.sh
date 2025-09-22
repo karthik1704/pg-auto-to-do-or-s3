@@ -10,20 +10,16 @@ FULL_BACKUP_PATH="${BACKUP_DIR}/${BACKUP_FILE}"
 # Ensure backup directory exists
 mkdir -p "$BACKUP_DIR"
 
-# Dump and compress PostgreSQL DB
-pg_dump -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" "$DB_NAME" | gzip > "$FULL_BACKUP_PATH"
-
-if [ $? -ne 0 ]; then
-    echo "[ERROR] Backup failed"
+# Dump and compress PostgreSQL DB with proper error handling
+if ! pg_dump -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" "$DB_NAME" | gzip > "$FULL_BACKUP_PATH"; then
+    echo "[ERROR] Backup failed: pg_dump failed or database does not exist"
     exit 1
 fi
 
 echo "[INFO] Backup created at $FULL_BACKUP_PATH"
 
 # Upload to DigitalOcean Spaces using s3cmd
-s3cmd put "$FULL_BACKUP_PATH" "s3://${DO_SPACE_BUCKET}/${DO_SPACE_PATH}${BACKUP_FILE}"
-
-if [ $? -ne 0 ]; then
+if ! s3cmd put "$FULL_BACKUP_PATH" "s3://${DO_SPACE_BUCKET}/${DO_SPACE_PATH}${BACKUP_FILE}"; then
     echo "[ERROR] Upload to DigitalOcean Spaces failed"
     exit 1
 fi
@@ -31,12 +27,14 @@ fi
 echo "[INFO] Uploaded to DO Spaces"
 
 # Delete older local backups (keep only 3)
-cd "$BACKUP_DIR"
-ls -tp *.gz | grep -v '/$' | tail -n +4 | xargs -I {} rm -- {}
+cd "$BACKUP_DIR" || exit
+ls -tp *.gz | grep -v '/$' | tail -n +4 | xargs -r rm --
 
 # Delete older backups from DO Spaces (keep only 3)
 s3cmd ls "s3://${DO_SPACE_BUCKET}/${DO_SPACE_PATH}" | \
-    sort -r | awk '{print $4}' | tail -n +4 | while read OLD_BACKUP; do
-        echo "[INFO] Deleting old backup from DO Spaces: $OLD_BACKUP"
-        s3cmd del "$OLD_BACKUP"
+    sort -r | awk '{print $4}' | tail -n +4 | while read -r OLD_BACKUP; do
+        if [ -n "$OLD_BACKUP" ]; then
+            echo "[INFO] Deleting old backup from DO Spaces: $OLD_BACKUP"
+            s3cmd del "$OLD_BACKUP"
+        fi
     done
